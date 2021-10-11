@@ -6,6 +6,7 @@ from PIL import Image, ImageTk
 import matplotlib.image as mpimg
 import numpy as np
 import cv2
+np.set_printoptions(threshold=np.inf)
 
 ctypes.windll.shcore.SetProcessDpiAwareness(True)
 
@@ -31,6 +32,7 @@ def draw_before_canvas():
     # original_img = Image.open(filename).resize((512, 512), Image.BILINEAR)  # if resize
     # img = ImageTk.PhotoImage(original_img)
     original_img = Image.open(ip_file)
+    original_img = original_img.convert('RGB')
     img = ImageTk.PhotoImage(original_img)
     before_canvas.create_image(
         256,
@@ -43,7 +45,8 @@ def draw_before_canvas():
 
 def draw_after_canvas(mimg):
     global modified_img
-    modified_img = Image.fromarray(mimg)
+    
+    modified_img = Image.fromarray(np.uint8(mimg))
     img = ImageTk.PhotoImage(modified_img)
     after_canvas.create_image(
         256,
@@ -118,13 +121,13 @@ scrollable_algo_frame.bind(
     "<Configure>", lambda _: algo_canvas.configure(scrollregion=algo_canvas.bbox("all"))
 )
 
-grayscale_setting = IntVar()
-grayscale_setting.set(0)
+# grayscale_setting = IntVar()
+# grayscale_setting.set(0)
 
-grayscale_checkbtn = ttk.Checkbutton(
-    middle_frame, text="Grayscale output?", variable=grayscale_setting
-)
-grayscale_checkbtn.pack(pady=6)
+# grayscale_checkbtn = ttk.Checkbutton(
+#     middle_frame, text="Grayscale output?", variable=grayscale_setting
+# )
+# grayscale_checkbtn.pack(pady=6)
 
 # right frame contents
 after_canvas = Canvas(right_frame, bg="white", width=512, height=512)
@@ -146,14 +149,14 @@ def callRGB2Gray():
     draw_after_canvas(grayscale)
 
 
-def negative():
-    img = RGB2Gray() if (grayscale_setting.get()) else Image.open(ip_file)
+def negative(set_gray):
+    img = RGB2Gray() if (set_gray) else Image.open(ip_file)
     img = np.array(img)
     img = 255 - img
     draw_after_canvas(img)
 
 
-def gray_slice_withbg():
+def gray_slice_retain_bg():
     lower_limit = 100
     upper_limit = 180
     img = RGB2Gray()
@@ -168,7 +171,7 @@ def gray_slice_withbg():
     draw_after_canvas(img_thresh)
 
 
-def gray_slice_withoutbg():
+def gray_slice_lower_bg():
     lower_limit = 100
     upper_limit = 180
     img = RGB2Gray()
@@ -201,35 +204,71 @@ def bit_slice():
     draw_after_canvas(final_img)
 
 
+def linear_Cstretch_pixval(pix, r1, s1, r2, s2):
+    if pix >= 0 and pix <= r1:
+        return (s1 / r1)*pix
+    elif (r1 < pix and pix <= r2):
+        return ((s2 - s1)/(r2 - r1)) * (pix - r1) + s1
+    else:
+        return ((255 - s2)/(255 - r2)) * (pix - r2) + s2
+
+
+def linear_Cstretch():
+    img = cv2.imread(ip_file)
+    r1 = 70
+    r2 = 140
+    s1 = 0
+    s2 = 255
+    # Vectorize the function to apply it to each value in the Numpy array.
+    pixelVal_vec = np.vectorize(linear_Cstretch_pixval)
+    
+    # Apply contrast stretching.
+    contrast_stretched = pixelVal_vec(img, r1, s1, r2, s2)
+    
+    
+    draw_after_canvas(contrast_stretched)
+
+
 # algorithm btns
-algo_b1 = ttk.Button(
+ttk.Button(
     scrollable_algo_frame, text="RGB to Grayscale", width=30, command=callRGB2Gray
 ).pack(expand=1, padx=5, pady=2, ipady=2)
 
-algo_b2 = ttk.Button(
-    scrollable_algo_frame, text="Negative", width=30, command=negative
+ttk.Button(
+    scrollable_algo_frame, text="Negative", width=30, command=lambda:negative(set_gray=False)
 ).pack(pady=2, ipady=2)
 
-algo_b3 = ttk.Button(
+ttk.Button(
+    scrollable_algo_frame, text="Negative\n(Grayscale output)", width=30, command=lambda:negative(set_gray=True)
+).pack(pady=2, ipady=2)
+
+ttk.Button(
     scrollable_algo_frame,
-    text="Gray level slicing\n(with background)",
+    text="Gray level slicing\n(retaining background)",
     width=30,
-    command=gray_slice_withbg,
+    command=gray_slice_retain_bg,
 ).pack(pady=2, ipady=2)
 
-algo_b4 = ttk.Button(
+ttk.Button(
     scrollable_algo_frame,
-    text="Gray level slicing\n(without background)",
+    text="Gray level slicing\n(lowering background)",
     width=30,
-    command=gray_slice_withoutbg,
+    command=gray_slice_lower_bg,
 ).pack(pady=2, ipady=2)
 
 
-algo_b5 = ttk.Button(
+ttk.Button(
     scrollable_algo_frame,
     text="Bit plane slicing",
     width=30,
     command=bit_slice,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Contrast Stretching\n(Linear)",
+    width=30,
+    command=linear_Cstretch,
 ).pack(pady=2, ipady=2)
 
 root.mainloop()
