@@ -6,7 +6,9 @@ from PIL import Image, ImageTk
 import matplotlib.image as mpimg
 import numpy as np
 import cv2
-np.set_printoptions(threshold=np.inf)
+import sys
+
+# np.set_printoptions(threshold=sys.maxsize)
 
 ctypes.windll.shcore.SetProcessDpiAwareness(True)
 
@@ -32,7 +34,7 @@ def draw_before_canvas():
     # original_img = Image.open(filename).resize((512, 512), Image.BILINEAR)  # if resize
     # img = ImageTk.PhotoImage(original_img)
     original_img = Image.open(ip_file)
-    original_img = original_img.convert('RGB')
+    original_img = original_img.convert("RGB")
     img = ImageTk.PhotoImage(original_img)
     before_canvas.create_image(
         256,
@@ -45,7 +47,7 @@ def draw_before_canvas():
 
 def draw_after_canvas(mimg):
     global modified_img
-    
+
     modified_img = Image.fromarray(np.uint8(mimg))
     img = ImageTk.PhotoImage(modified_img)
     after_canvas.create_image(
@@ -191,12 +193,17 @@ def bit_slice():
     img = np.array(img)
 
     for k in range(9):
+        # create an image for the k bit plane
         plane = np.full((img.shape[0], img.shape[1]), 2 ** k, np.uint8)
+        # execute bitwise and operation
         res = cv2.bitwise_and(plane, img)
+        # multiply ones (bit plane sliced) with 255 just for better visualization
         x = res * 255
         x = cv2.resize(x, (171, 171))
+        # append to the output list
         bitplanes.append(x)
 
+    # concat all 8 bit planes into one image
     row1 = cv2.hconcat([bitplanes[0], bitplanes[1], bitplanes[2]])
     row2 = cv2.hconcat([bitplanes[3], bitplanes[4], bitplanes[5]])
     row3 = cv2.hconcat([bitplanes[6], bitplanes[7], bitplanes[8]])
@@ -204,29 +211,47 @@ def bit_slice():
     draw_after_canvas(final_img)
 
 
-def linear_Cstretch_pixval(pix, r1, s1, r2, s2):
-    if pix >= 0 and pix <= r1:
-        return (s1 / r1)*pix
-    elif (r1 < pix and pix <= r2):
-        return ((s2 - s1)/(r2 - r1)) * (pix - r1) + s1
-    else:
-        return ((255 - s2)/(255 - r2)) * (pix - r2) + s2
+def c_stretch(img, r1, r2, s1, s2):
+    image_cs = img
+    for i in range(len(img)):
+        for j in range(len(img[0])):
+            if img[i, j] < r1:
+                image_cs[i, j] = s1
+            elif img[i, j] > r2:
+                image_cs[i, j] = s2
+            else:
+                image_cs[i, j] = s1 + ((s2 - s1) * (img[i, j] - r1) / (r2 - r1))
+    return image_cs
 
 
-def linear_Cstretch():
-    img = cv2.imread(ip_file)
-    r1 = 70
-    r2 = 140
+def linear_c_stretch():
+    img = cv2.imread(ip_file, 0)
+    # print(np.min(img))
+    # print(np.max(img))
+    r1 = np.min(img)
+    r2 = np.max(img)
     s1 = 0
     s2 = 255
-    # Vectorize the function to apply it to each value in the Numpy array.
-    pixelVal_vec = np.vectorize(linear_Cstretch_pixval)
-    
-    # Apply contrast stretching.
-    contrast_stretched = pixelVal_vec(img, r1, s1, r2, s2)
-    
-    
-    draw_after_canvas(contrast_stretched)
+    image_cs = c_stretch(img, r1, r2, s1, s2)
+
+    # print(np.min(image_cs))
+    # print(np.max(image_cs))
+    draw_after_canvas(image_cs)
+
+
+def limited_c_stretch():
+    img = cv2.imread(ip_file, 0)
+    # print(np.min(img))
+    # print(np.max(img))
+    r1 = np.min(img)
+    r2 = np.max(img)
+    s1 = 25
+    s2 = 220
+    image_cs = c_stretch(img, r1, r2, s1, s2)
+
+    # print(np.min(image_cs))
+    # print(np.max(image_cs))
+    draw_after_canvas(image_cs)
 
 
 # algorithm btns
@@ -235,11 +260,17 @@ ttk.Button(
 ).pack(expand=1, padx=5, pady=2, ipady=2)
 
 ttk.Button(
-    scrollable_algo_frame, text="Negative", width=30, command=lambda:negative(set_gray=False)
+    scrollable_algo_frame,
+    text="Negative",
+    width=30,
+    command=lambda: negative(set_gray=False),
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
-    scrollable_algo_frame, text="Negative\n(Grayscale output)", width=30, command=lambda:negative(set_gray=True)
+    scrollable_algo_frame,
+    text="Negative\n(Grayscale output)",
+    width=30,
+    command=lambda: negative(set_gray=True),
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
@@ -268,7 +299,14 @@ ttk.Button(
     scrollable_algo_frame,
     text="Contrast Stretching\n(Linear)",
     width=30,
-    command=linear_Cstretch,
+    command=linear_c_stretch,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Contrast Stretching\n(Limited Linear)",
+    width=30,
+    command=limited_c_stretch,
 ).pack(pady=2, ipady=2)
 
 root.mainloop()
