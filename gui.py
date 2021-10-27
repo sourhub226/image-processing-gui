@@ -159,39 +159,25 @@ def negative(set_gray):
     draw_after_canvas(img)
 
 
-def gray_slice_retain_bg():
+def gray_slice(img, lower_limit, upper_limit, fn):
+    if lower_limit <= img <= upper_limit:
+        return 255
+    else:
+        return fn
+
+
+def call_gray_slice(retain):
+    img = RGB2Gray()
     lower_limit = 100
     upper_limit = 180
-    img = RGB2Gray()
-    m, n = img.shape
-    img_thresh = np.zeros((m, n), dtype=int)
-
-    for i in range(m):
-        for j in range(n):
-            img_thresh[i, j] = (
-                255 if lower_limit <= img[i, j] <= upper_limit else img[i, j]
-            )
-    draw_after_canvas(img_thresh)
-
-
-def gray_slice_lower_bg():
-    lower_limit = 100
-    upper_limit = 180
-    img = RGB2Gray()
-    m, n = img.shape
-    img_thresh = np.zeros((m, n), dtype=int)
-
-    for i in range(m):
-        for j in range(n):
-            img_thresh[i, j] = 255 if lower_limit <= img[i, j] <= upper_limit else 0
-    draw_after_canvas(img_thresh)
+    img_thresh = np.vectorize(gray_slice)
+    fn = img if retain else 0
+    draw_after_canvas(img_thresh(img, lower_limit, upper_limit, fn))
 
 
 def bit_slice():
     bitplanes = []
-
     img = cv2.imread(ip_file, 0)
-    img = np.array(img)
 
     for k in range(9):
         # create an image for the k bit plane
@@ -253,14 +239,14 @@ ttk.Button(
     scrollable_algo_frame,
     text="Gray level slicing\n(retaining background)",
     width=30,
-    command=gray_slice_retain_bg,
+    command=lambda: call_gray_slice(retain=True),
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
     text="Gray level slicing\n(lowering background)",
     width=30,
-    command=gray_slice_lower_bg,
+    command=lambda: call_gray_slice(retain=False),
 ).pack(pady=2, ipady=2)
 
 
