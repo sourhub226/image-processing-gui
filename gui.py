@@ -5,7 +5,8 @@ import os
 from tkinter import *
 from tkinter import filedialog, ttk
 import cv2
-import matplotlib.image as mpimg
+from matplotlib import image as mpimg
+from matplotlib import pyplot as plt
 import numpy as np
 from PIL import Image, ImageTk
 
@@ -25,15 +26,13 @@ original_img = None
 modified_img = None
 
 root.title("Image processing")
-root.geometry(f"{gui_width}x{gui_height}")
+# root.geometry(f"{gui_width}x{gui_height}")
 # root.resizable(False, False)
 root.minsize(gui_width, gui_height)
 
 
 def draw_before_canvas():
     global original_img, ip_file
-    # original_img = Image.open(filename).resize((512, 512), Image.BILINEAR)  # if resize
-    # img = ImageTk.PhotoImage(original_img)
     original_img = Image.open(ip_file)
     original_img = original_img.convert("RGB")
     img = ImageTk.PhotoImage(original_img)
@@ -160,6 +159,7 @@ def negative(set_gray):
 
 
 def gray_slice(img, lower_limit, upper_limit, fn):
+    # general function
     if lower_limit <= img <= upper_limit:
         return 255
     else:
@@ -199,6 +199,7 @@ def bit_slice():
 
 
 def c_stretch(img, r1, r2, s1, s2):
+    # general function
     if img < r1:
         return s1
     elif img > r2:
@@ -214,6 +215,31 @@ def call_c_stretch(limited):
     s1, s2 = (25, 220) if limited else (0, 255)
     image_cs = np.vectorize(c_stretch)
     draw_after_canvas(image_cs(img, r1, r2, s1, s2))
+
+
+def plot_histogram(label, img, index):
+    hist, bins = np.histogram(img, 256, [0, 256])
+    cdf = hist.cumsum()
+    cdf_normalized = cdf * float(hist.max()) / cdf.max()
+    plt.subplot(1, 2, index)
+    plt.title(label)
+    plt.plot(cdf_normalized, color="b")
+    plt.hist(img.flatten(), 256, [0, 256], color="r")
+    plt.xlim([0, 256])
+    plt.legend(("cdf", "histogram"), loc="upper left")
+    plt.xlabel("Pixel intensity")
+    plt.ylabel("Distirbution")
+    plt.tight_layout()
+
+
+def histogram_eq():
+    plt.figure(num=1, figsize=(11, 5), dpi=100)
+    img = cv2.imread(ip_file, 0)
+    plot_histogram("Original Histogram", img, 1)
+    equ_img = cv2.equalizeHist(img)
+    plot_histogram("Equalized Histogram", equ_img, 2)
+    draw_after_canvas(equ_img)
+    plt.show()
 
 
 # algorithm btns
@@ -269,6 +295,13 @@ ttk.Button(
     text="Contrast Stretching\n(Limited Linear)",
     width=30,
     command=lambda: call_c_stretch(limited=True),
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Histogram Equalization",
+    width=30,
+    command=histogram_eq,
 ).pack(pady=2, ipady=2)
 
 root.mainloop()
