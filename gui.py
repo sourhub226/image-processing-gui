@@ -1,12 +1,13 @@
 import ctypes
 import os
+
+# import sys
 from tkinter import *
 from tkinter import filedialog, ttk
-from PIL import Image, ImageTk
+import cv2
 import matplotlib.image as mpimg
 import numpy as np
-import cv2
-import sys
+from PIL import Image, ImageTk
 
 # np.set_printoptions(threshold=sys.maxsize)
 
@@ -168,7 +169,7 @@ def gray_slice_retain_bg():
     for i in range(m):
         for j in range(n):
             img_thresh[i, j] = (
-                0 if lower_limit < img[i, j] <= upper_limit else img[i, j]
+                255 if lower_limit <= img[i, j] <= upper_limit else img[i, j]
             )
     draw_after_canvas(img_thresh)
 
@@ -182,7 +183,7 @@ def gray_slice_lower_bg():
 
     for i in range(m):
         for j in range(n):
-            img_thresh[i, j] = 0 if lower_limit < img[i, j] <= upper_limit else 255
+            img_thresh[i, j] = 255 if lower_limit <= img[i, j] <= upper_limit else 0
     draw_after_canvas(img_thresh)
 
 
@@ -212,46 +213,21 @@ def bit_slice():
 
 
 def c_stretch(img, r1, r2, s1, s2):
-    image_cs = img
-    for i in range(len(img)):
-        for j in range(len(img[0])):
-            if img[i, j] < r1:
-                image_cs[i, j] = s1
-            elif img[i, j] > r2:
-                image_cs[i, j] = s2
-            else:
-                image_cs[i, j] = s1 + ((s2 - s1) * (img[i, j] - r1) / (r2 - r1))
-    return image_cs
+    if img < r1:
+        return s1
+    elif img > r2:
+        return s2
+    else:
+        return s1 + ((s2 - s1) * (img - r1) / (r2 - r1))
 
 
-def linear_c_stretch():
-    img = cv2.imread(ip_file, 0)
-    # print(np.min(img))
-    # print(np.max(img))
+def call_c_stretch(limited):
+    img = RGB2Gray()
     r1 = np.min(img)
     r2 = np.max(img)
-    s1 = 0
-    s2 = 255
-    image_cs = c_stretch(img, r1, r2, s1, s2)
-
-    # print(np.min(image_cs))
-    # print(np.max(image_cs))
-    draw_after_canvas(image_cs)
-
-
-def limited_c_stretch():
-    img = cv2.imread(ip_file, 0)
-    # print(np.min(img))
-    # print(np.max(img))
-    r1 = np.min(img)
-    r2 = np.max(img)
-    s1 = 25
-    s2 = 220
-    image_cs = c_stretch(img, r1, r2, s1, s2)
-
-    # print(np.min(image_cs))
-    # print(np.max(image_cs))
-    draw_after_canvas(image_cs)
+    s1, s2 = (25, 220) if limited else (0, 255)
+    image_cs = np.vectorize(c_stretch)
+    draw_after_canvas(image_cs(img, r1, r2, s1, s2))
 
 
 # algorithm btns
@@ -299,14 +275,14 @@ ttk.Button(
     scrollable_algo_frame,
     text="Contrast Stretching\n(Linear)",
     width=30,
-    command=linear_c_stretch,
+    command=lambda: call_c_stretch(limited=False),
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
     text="Contrast Stretching\n(Limited Linear)",
     width=30,
-    command=limited_c_stretch,
+    command=lambda: call_c_stretch(limited=True),
 ).pack(pady=2, ipady=2)
 
 root.mainloop()
