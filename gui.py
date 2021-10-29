@@ -67,7 +67,7 @@ def load_file():
         filetypes=[("All Image Files", "*.*")],
     )
     draw_before_canvas()
-    print(f"Image loaded from: {ip_file}")
+    # print(f"Image loaded from: {ip_file}")
 
 
 def save_file():
@@ -89,7 +89,7 @@ def save_file():
     )
     modified_img = modified_img.convert("RGB")
     modified_img.save(op_file)
-    print(f"Image saved at: {op_file}")
+    # print(f"Image saved at: {op_file}")
 
 
 # frames
