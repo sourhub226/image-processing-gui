@@ -9,6 +9,7 @@ from matplotlib import image as mpimg
 from matplotlib import pyplot as plt
 import numpy as np
 from PIL import Image, ImageTk
+import scipy.signal
 
 # np.set_printoptions(threshold=sys.maxsize)
 
@@ -123,13 +124,6 @@ scrollable_algo_frame.bind(
     "<Configure>", lambda _: algo_canvas.configure(scrollregion=algo_canvas.bbox("all"))
 )
 
-# grayscale_setting = IntVar()
-# grayscale_setting.set(0)
-
-# grayscale_checkbtn = ttk.Checkbutton(
-#     middle_frame, text="Grayscale output?", variable=grayscale_setting
-# )
-# grayscale_checkbtn.pack(pady=6)
 
 # right frame contents
 after_canvas = Canvas(right_frame, bg="white", width=512, height=512)
@@ -242,6 +236,38 @@ def histogram_eq():
     plt.show()
 
 
+def correlate(image, filter):
+    filtered_image = image
+    for i in range(image.shape[-1]):
+        filtered_image[:, :, i] = scipy.signal.correlate2d(
+            image[:, :, i], filter, mode="same", boundary="symm"  # extended padding
+        )
+    filtered_image = filtered_image[:, :, ::-1]  # converts BGR to RGB
+    return filtered_image
+
+
+def box_filter():
+    filter = [
+        [1 / 9, 1 / 9, 1 / 9],
+        [1 / 9, 1 / 9, 1 / 9],
+        [1 / 9, 1 / 9, 1 / 9],
+    ]
+    image = cv2.imread(ip_file)
+    filtered_image = correlate(image, filter)
+    draw_after_canvas(filtered_image)
+
+
+def wt_avg_filter():
+    filter = [
+        [1 / 16, 2 / 16, 1 / 16],
+        [2 / 16, 4 / 16, 2 / 16],
+        [1 / 16, 2 / 16, 1 / 16],
+    ]
+    image = cv2.imread(ip_file)
+    filtered_image = correlate(image, filter)
+    draw_after_canvas(filtered_image)
+
+
 # algorithm btns
 ttk.Button(
     scrollable_algo_frame, text="RGB to Grayscale", width=30, command=callRGB2Gray
@@ -303,5 +329,33 @@ ttk.Button(
     width=30,
     command=histogram_eq,
 ).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Smoothing\n(3x3 Avg/Box Filter)",
+    width=30,
+    command=box_filter,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Smoothing\n(3x3 Weighted Avg Filter)",
+    width=30,
+    command=wt_avg_filter,
+).pack(pady=2, ipady=2)
+
+# ttk.Button(
+#     scrollable_algo_frame,
+#     text="Image Smoothing\n(3x3 Median Filter)",
+#     width=30,
+#     command=wt_avg_filter,
+# ).pack(pady=2, ipady=2)
+
+# ttk.Button(
+#     scrollable_algo_frame,
+#     text="Image Smoothing\n(3x3 Weighted Median Filter)",
+#     width=30,
+#     command=wt_avg_filter,
+# ).pack(pady=2, ipady=2)
 
 root.mainloop()
