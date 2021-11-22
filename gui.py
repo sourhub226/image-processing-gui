@@ -25,11 +25,37 @@ ip_file = ""
 op_file = ""
 original_img = None
 modified_img = None
+user_arg = None
+popup = None
+popup_input = None
+
 
 root.title("Image processing")
 # root.geometry(f"{gui_width}x{gui_height}")
 # root.resizable(False, False)
 root.minsize(gui_width, gui_height)
+
+
+def set_user_arg():
+    global user_arg
+    user_arg = popup_input.get()
+    popup.destroy()
+    popup.quit()
+
+
+def open_popup_input(text):
+    global popup, popup_input
+    popup = Toplevel(root)
+    popup.resizable(False, False)
+    popup.title("User Input")
+    text_label = ttk.Label(popup, text=text, justify=LEFT)
+    text_label.pack(side=TOP, anchor=W, padx=15, pady=10)
+    popup_input = ttk.Entry(popup)
+    popup_input.pack(side=TOP, anchor=NW, fill=X, padx=15)
+    popup_btn = ttk.Button(popup, text="OK", command=set_user_arg).pack(pady=10)
+    popup.geometry(f"400x{104+text_label.winfo_reqheight()}")
+    popup_input.focus()
+    popup.mainloop()
 
 
 def draw_before_canvas():
@@ -162,33 +188,48 @@ def gray_slice(img, lower_limit, upper_limit, fn):
 
 def call_gray_slice(retain):
     img = RGB2Gray()
-    lower_limit = 100
-    upper_limit = 180
+    # input 100,180
+    open_popup_input("Enter lower limit, upper limit\n(Separate inputs with a comma)")
+    arg_list = user_arg.replace(" ", "").split(",")
+    print(arg_list)
+    lower_limit = int(arg_list[0])
+    upper_limit = int(arg_list[1])
     img_thresh = np.vectorize(gray_slice)
     fn = img if retain else 0
     draw_after_canvas(img_thresh(img, lower_limit, upper_limit, fn))
 
 
-def bit_slice():
+def bit_slice(img, k):
+    # create an image for the k bit plane
+    plane = np.full((img.shape[0], img.shape[1]), 2 ** k, np.uint8)
+    # execute bitwise and operation
+    res = cv2.bitwise_and(plane, img)
+    # multiply ones (bit plane sliced) with 255 just for better visualization
+    return res * 255
+
+
+def call_bit_slice():
+    global user_arg
     bitplanes = []
     img = cv2.imread(ip_file, 0)
+    open_popup_input(
+        "Enter bit plane no k (0-7)\n(or leave it blank to display all 8 planes together)"
+    )
+    if not user_arg:
+        for k in range(9):
+            slice = bit_slice(img, k)
+            # append to the output list
+            slice = cv2.resize(slice, (171, 171))
+            bitplanes.append(slice)
 
-    for k in range(9):
-        # create an image for the k bit plane
-        plane = np.full((img.shape[0], img.shape[1]), 2 ** k, np.uint8)
-        # execute bitwise and operation
-        res = cv2.bitwise_and(plane, img)
-        # multiply ones (bit plane sliced) with 255 just for better visualization
-        x = res * 255
-        x = cv2.resize(x, (171, 171))
-        # append to the output list
-        bitplanes.append(x)
+        # concat all 8 bit planes into one image
+        row1 = cv2.hconcat([bitplanes[0], bitplanes[1], bitplanes[2]])
+        row2 = cv2.hconcat([bitplanes[3], bitplanes[4], bitplanes[5]])
+        row3 = cv2.hconcat([bitplanes[6], bitplanes[7], bitplanes[8]])
+        final_img = cv2.vconcat([row1, row2, row3])
+    else:
+        final_img = bit_slice(img, int(user_arg))
 
-    # concat all 8 bit planes into one image
-    row1 = cv2.hconcat([bitplanes[0], bitplanes[1], bitplanes[2]])
-    row2 = cv2.hconcat([bitplanes[3], bitplanes[4], bitplanes[5]])
-    row3 = cv2.hconcat([bitplanes[6], bitplanes[7], bitplanes[8]])
-    final_img = cv2.vconcat([row1, row2, row3])
     draw_after_canvas(final_img)
 
 
@@ -203,10 +244,17 @@ def c_stretch(img, r1, r2, s1, s2):
 
 
 def call_c_stretch(limited):
+    # input
     img = RGB2Gray()
     r1 = np.min(img)
     r2 = np.max(img)
-    s1, s2 = (25, 220) if limited else (0, 255)
+    if limited:
+        # input 25,220
+        open_popup_input("Enter s1,s2\n(Separate inputs with a comma)")
+        arg_list = user_arg.replace(" ", "").split(",")
+        s1, s2 = int(arg_list[0]), int(arg_list[1])
+    else:
+        s1, s2 = (0, 255)
     image_cs = np.vectorize(c_stretch)
     draw_after_canvas(image_cs(img, r1, r2, s1, s2))
 
@@ -247,11 +295,11 @@ def correlate(image, filter):
 
 
 def box_filter():
-    filter = [
-        [1 / 9, 1 / 9, 1 / 9],
-        [1 / 9, 1 / 9, 1 / 9],
-        [1 / 9, 1 / 9, 1 / 9],
-    ]
+    global user_arg
+    open_popup_input("Enter n for (nxn) filter")
+    user_arg = int(user_arg)
+    filter = np.ones([user_arg, user_arg], dtype=int)
+    filter = filter / (user_arg ** 2)
     image = cv2.imread(ip_file)
     filtered_image = correlate(image, filter)
     draw_after_canvas(filtered_image)
@@ -301,12 +349,11 @@ ttk.Button(
     command=lambda: call_gray_slice(retain=False),
 ).pack(pady=2, ipady=2)
 
-
 ttk.Button(
     scrollable_algo_frame,
     text="Bit plane slicing",
     width=30,
-    command=bit_slice,
+    command=call_bit_slice,
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
@@ -332,7 +379,7 @@ ttk.Button(
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Smoothing\n(3x3 Avg/Box Filter)",
+    text="Image Smoothing\n(nxn Avg/Box Filter)",
     width=30,
     command=box_filter,
 ).pack(pady=2, ipady=2)
