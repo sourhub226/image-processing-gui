@@ -1,7 +1,5 @@
 import ctypes
 import os
-
-# import sys
 from tkinter import *
 from tkinter import filedialog, ttk
 import cv2
@@ -75,7 +73,7 @@ def draw_before_canvas():
 def draw_after_canvas(mimg):
     global modified_img
 
-    modified_img = Image.fromarray(np.uint8(mimg))
+    modified_img = Image.fromarray(mimg)
     img = ImageTk.PhotoImage(modified_img)
     after_canvas.create_image(
         256,
@@ -217,10 +215,10 @@ def call_bit_slice():
     )
     if not user_arg:
         for k in range(9):
-            slice = bit_slice(img, k)
+            bslice = bit_slice(img, k)
             # append to the output list
-            slice = cv2.resize(slice, (171, 171))
-            bitplanes.append(slice)
+            bslice = cv2.resize(bslice, (171, 171))
+            bitplanes.append(bslice)
 
         # concat all 8 bit planes into one image
         row1 = cv2.hconcat([bitplanes[0], bitplanes[1], bitplanes[2]])
@@ -244,13 +242,12 @@ def c_stretch(img, r1, r2, s1, s2):
 
 
 def call_c_stretch(limited):
-    # input
     img = RGB2Gray()
     r1 = np.min(img)
     r2 = np.max(img)
     if limited:
         # input 25,220
-        open_popup_input("Enter s1,s2\n(Separate inputs with a comma)")
+        open_popup_input("Enter s1,s2\n(Separate inputs with a comma)")  # user input
         arg_list = user_arg.replace(" ", "").split(",")
         s1, s2 = int(arg_list[0]), int(arg_list[1])
     else:
@@ -284,36 +281,79 @@ def histogram_eq():
     plt.show()
 
 
-def correlate(image, filter):
-    filtered_image = image
-    for i in range(image.shape[-1]):
-        filtered_image[:, :, i] = scipy.signal.correlate2d(
-            image[:, :, i], filter, mode="same", boundary="symm"  # extended padding
-        )
+def correlate(kernel):
+    image = cv2.imread(ip_file)
+    # filtered_image = image
+    # for i in range(image.shape[-1]):
+    #     filtered_image[:, :, i] = scipy.signal.correlate2d(
+    #         image[:, :, i], kernel, mode="same", boundary="symm"  # extended padding
+    #     )
+    filtered_image = cv2.filter2D(src=image, ddepth=-1, kernel=kernel)
     filtered_image = filtered_image[:, :, ::-1]  # converts BGR to RGB
-    return filtered_image
+    draw_after_canvas(filtered_image)
 
 
 def box_filter():
     global user_arg
     open_popup_input("Enter n for (nxn) filter")
     user_arg = int(user_arg)
-    filter = np.ones([user_arg, user_arg], dtype=int)
-    filter = filter / (user_arg ** 2)
-    image = cv2.imread(ip_file)
-    filtered_image = correlate(image, filter)
-    draw_after_canvas(filtered_image)
+    kernel = np.ones([user_arg, user_arg], dtype=int)
+    kernel = kernel / (user_arg ** 2)
+    correlate(kernel)
 
 
 def wt_avg_filter():
-    filter = [
-        [1 / 16, 2 / 16, 1 / 16],
-        [2 / 16, 4 / 16, 2 / 16],
-        [1 / 16, 2 / 16, 1 / 16],
+    kernel = (
+        np.array(
+            [
+                [1, 2, 1],
+                [2, 4, 2],
+                [1, 2, 1],
+            ]
+        )
+        * (1 / 16)
+    )
+    correlate(kernel)
+
+
+def find_gradient(hx, hy):
+    image = cv2.imread(ip_file, 0)
+    pdx = scipy.signal.correlate2d(image, hx, mode="same", boundary="symm")
+    pdy = scipy.signal.correlate2d(image, hy, mode="same", boundary="symm")
+    gradient = np.add(np.abs(pdx), np.abs(pdy))
+    # sharpened_img=np.add(image,gradient)
+    # draw_after_canvas(sharpened_img)
+    draw_after_canvas(gradient)
+
+
+def robert_op():
+    hx = np.array([[1, 0], [0, -1]])
+    hy = np.array([[0, -1], [1, 0]])
+    find_gradient(hx, hy)
+
+
+def prewitt_op():
+    hx = np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]])
+    hy = np.array([[1, 0, -1], [1, 0, -1], [1, 0, -1]])
+    find_gradient(hx, hy)
+
+
+def sobel_op():
+    hx = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
+    hy = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
+    find_gradient(hx, hy)
+
+
+def laplacian_op():
+    kernel = [
+        [-1, -1, -1],
+        [-1, 8, -1],
+        [-1, -1, -1],
     ]
-    image = cv2.imread(ip_file)
-    filtered_image = correlate(image, filter)
-    draw_after_canvas(filtered_image)
+    image = cv2.imread(ip_file, 0)
+    laplace = scipy.signal.correlate2d(image, kernel, mode="same", boundary="symm")
+    # sharpened_img = np.add(image, laplace)
+    draw_after_canvas(laplace)
 
 
 # algorithm btns
@@ -395,14 +435,43 @@ ttk.Button(
 #     scrollable_algo_frame,
 #     text="Image Smoothing\n(3x3 Median Filter)",
 #     width=30,
-#     command=wt_avg_filter,
+#     command=,
 # ).pack(pady=2, ipady=2)
 
 # ttk.Button(
 #     scrollable_algo_frame,
 #     text="Image Smoothing\n(3x3 Weighted Median Filter)",
 #     width=30,
-#     command=wt_avg_filter,
+#     command=,
 # ).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Sharpening\n(Gradient - Roberts operator)",
+    width=30,
+    command=robert_op,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Sharpening\n(Gradient - Prewitt operator)",
+    width=30,
+    command=prewitt_op,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Sharpening\n(Gradient - Sobel operator)",
+    width=30,
+    command=sobel_op,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Sharpening\n(Laplacian operator)",
+    width=30,
+    command=laplacian_op,
+).pack(pady=2, ipady=2)
+
 
 root.mainloop()
