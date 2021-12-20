@@ -22,9 +22,13 @@ GUI created using Tkinter in python.
     -   Linear
         -   Average/Box filter
         -   Weighted Average filter
+    -   Non Linear
+        -   Median filter
+        -   Weighted Median filter
 -   Image sharpening
     -   Gradient operator
         -   Roberts operator
         -   Prewitt operator
         -   Sobel operator
     -   Laplacian operator
+-   Canny edge detection

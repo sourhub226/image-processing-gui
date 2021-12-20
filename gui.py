@@ -3,11 +3,11 @@ import os
 from tkinter import *
 from tkinter import filedialog, ttk
 import cv2
+import numpy as np
+import scipy.signal
 from matplotlib import image as mpimg
 from matplotlib import pyplot as plt
-import numpy as np
 from PIL import Image, ImageTk
-import scipy.signal
 
 # np.set_printoptions(threshold=sys.maxsize)
 
@@ -281,7 +281,7 @@ def histogram_eq():
     plt.show()
 
 
-def correlate(kernel):
+def custom_correlate(kernel):
     image = cv2.imread(ip_file)
     # filtered_image = image
     # for i in range(image.shape[-1]):
@@ -299,21 +299,75 @@ def box_filter():
     user_arg = int(user_arg)
     kernel = np.ones([user_arg, user_arg], dtype=int)
     kernel = kernel / (user_arg ** 2)
-    correlate(kernel)
+    # print(kernel)
+    # print(sum(map(sum, kernel)))
+    custom_correlate(kernel)
 
 
 def wt_avg_filter():
-    kernel = (
+    global user_arg
+    open_popup_input("Enter n for (nxn) filter")
+    user_arg = int(user_arg)
+    seed = kernel = (
         np.array(
             [
-                [1, 2, 1],
-                [2, 4, 2],
-                [1, 2, 1],
+                [1, 1],
+                [1, 1],
             ]
         )
-        * (1 / 16)
+        * (1 / 4)
     )
-    correlate(kernel)
+    for _ in range(user_arg - 2):
+        kernel = scipy.signal.correlate2d(kernel, seed)
+    # print(kernel)
+    # print(sum(map(sum, kernel)))
+    custom_correlate(kernel)
+
+
+def median_filter():
+    global user_arg
+    open_popup_input("Enter n for (nxn) filter")
+    msize = int(user_arg)
+    img = output = cv2.imread(ip_file, 0)
+    h, w = img.shape
+    img = np.pad(img, msize // 2, mode="symmetric")
+    center = msize ** 2 // 2
+
+    for i in range(h):
+        for j in range(w):
+            temp = img[i : msize + i, j : msize + j].flatten()
+            temp.sort()
+            output[i][j] = temp[center]
+    draw_after_canvas(output)
+
+
+def wt_median_filter():
+    img = output = cv2.imread(ip_file, 0)
+    m, n = img.shape
+
+    for i in range(1, m - 1):
+        for j in range(1, n - 1):
+            temp = [
+                img[i - 1, j - 1],
+                img[i - 1, j],
+                img[i - 1, j],
+                img[i - 1, j + 1],
+                img[i, j - 1],
+                img[i, j - 1],
+                img[i, j],
+                img[i, j],
+                img[i, j],
+                img[i, j + 1],
+                img[i, j + 1],
+                img[i + 1, j - 1],
+                img[i + 1, j],
+                img[i + 1, j],
+                img[i + 1, j + 1],
+            ]
+
+            temp.sort()
+            output[i, j] = temp[7]
+    draw_after_canvas(output)
 
 
 def find_gradient(hx, hy):
@@ -327,20 +381,54 @@ def find_gradient(hx, hy):
 
 
 def robert_op():
-    hx = np.array([[1, 0], [0, -1]])
-    hy = np.array([[0, -1], [1, 0]])
+    hx = np.array(
+        [
+            [1, 0],
+            [0, -1],
+        ]
+    )
+    hy = np.array(
+        [
+            [0, -1],
+            [1, 0],
+        ]
+    )
     find_gradient(hx, hy)
 
 
 def prewitt_op():
-    hx = np.array([[1, 1, 1], [0, 0, 0], [-1, -1, -1]])
-    hy = np.array([[1, 0, -1], [1, 0, -1], [1, 0, -1]])
+    hx = np.array(
+        [
+            [1, 1, 1],
+            [0, 0, 0],
+            [-1, -1, -1],
+        ]
+    )
+    hy = np.array(
+        [
+            [1, 0, -1],
+            [1, 0, -1],
+            [1, 0, -1],
+        ]
+    )
     find_gradient(hx, hy)
 
 
 def sobel_op():
-    hx = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
-    hy = np.array([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
+    hx = np.array(
+        [
+            [1, 2, 1],
+            [0, 0, 0],
+            [-1, -2, -1],
+        ]
+    )
+    hy = np.array(
+        [
+            [1, 0, -1],
+            [2, 0, -2],
+            [1, 0, -1],
+        ]
+    )
     find_gradient(hx, hy)
 
 
@@ -354,6 +442,101 @@ def laplacian_op():
     laplace = scipy.signal.correlate2d(image, kernel, mode="same", boundary="symm")
     # sharpened_img = np.add(image, laplace)
     draw_after_canvas(laplace)
+
+
+def canny():  # sourcery no-metrics
+    sigma = 1
+    kernel_size = 5
+    weak_pixel = 75
+    strong_pixel = 255
+    lowthreshold = 0.05
+    highthreshold = 0.15
+
+    img = cv2.imread(ip_file, 0)
+    M, N = img.shape
+
+    # 1) Noise reduction
+    size = kernel_size // 2
+    x, y = np.mgrid[-size : size + 1, -size : size + 1]
+    normal = 1 / (2.0 * np.pi * sigma ** 2)
+    kernel = np.exp(-((x ** 2 + y ** 2) / (2.0 * sigma ** 2))) * normal
+    img_smoothed = scipy.signal.convolve2d(img, kernel, mode="same", boundary="symm")
+
+    # 2) Gradient calc (sobel)
+    hx = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
+    hy = np.array([[1, 2, 1], [0, 0, 0], [-1, -2, -1]])
+
+    pdx = scipy.signal.convolve2d(img_smoothed, hx, mode="same", boundary="symm")
+    pdy = scipy.signal.convolve2d(img_smoothed, hy, mode="same", boundary="symm")
+
+    gradient = np.sqrt(pdx ** 2 + pdy ** 2)
+    gradient = gradient / gradient.max() * 255
+    theta = np.arctan2(pdy, pdx)
+
+    # 3) Non Max supression
+    nonmax = np.zeros((M, N), dtype=np.int32)
+    angle = theta * 180.0 / np.pi
+    angle[angle < 0] += 180
+
+    for i in range(1, M - 1):
+        for j in range(1, N - 1):
+            q = 255
+            r = 255
+
+            # angle 0
+            if (0 <= angle[i, j] < 22.5) or (157.5 <= angle[i, j] <= 180):
+                q = gradient[i, j + 1]
+                r = gradient[i, j - 1]
+            # angle 45
+            elif 22.5 <= angle[i, j] < 67.5:
+                q = gradient[i + 1, j - 1]
+                r = gradient[i - 1, j + 1]
+            # angle 90
+            elif 67.5 <= angle[i, j] < 112.5:
+                q = gradient[i + 1, j]
+                r = gradient[i - 1, j]
+            # angle 135
+            elif 112.5 <= angle[i, j] < 157.5:
+                q = gradient[i - 1, j - 1]
+                r = gradient[i + 1, j + 1]
+
+            if (gradient[i, j] >= q) and (gradient[i, j] >= r):
+                nonmax[i, j] = gradient[i, j]
+            else:
+                nonmax[i, j] = 0
+
+    # 4) Double threshold
+    highThreshold = nonmax.max() * highthreshold
+    lowThreshold = highThreshold * lowthreshold
+
+    thresh = np.zeros((M, N), dtype=np.int32)
+
+    strong_i, strong_j = np.where(nonmax >= highThreshold)
+    weak_i, weak_j = np.where((nonmax <= highThreshold) & (nonmax >= lowThreshold))
+
+    thresh[strong_i, strong_j] = strong_pixel
+    thresh[weak_i, weak_j] = weak_pixel
+
+    # 5) Hysteresis
+    for i in range(1, M - 1):
+        for j in range(1, N - 1):
+            if thresh[i, j] == weak_pixel:
+
+                if (
+                    (thresh[i + 1, j - 1] == strong_pixel)
+                    or (thresh[i + 1, j] == strong_pixel)
+                    or (thresh[i + 1, j + 1] == strong_pixel)
+                    or (thresh[i, j - 1] == strong_pixel)
+                    or (thresh[i, j + 1] == strong_pixel)
+                    or (thresh[i - 1, j - 1] == strong_pixel)
+                    or (thresh[i - 1, j] == strong_pixel)
+                    or (thresh[i - 1, j + 1] == strong_pixel)
+                ):
+                    thresh[i, j] = strong_pixel
+                else:
+                    thresh[i, j] = 0
+
+    draw_after_canvas(thresh)
 
 
 # algorithm btns
@@ -419,59 +602,65 @@ ttk.Button(
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Smoothing\n(nxn Avg/Box Filter)",
+    text="Image Smoothing - Linear\n(nxn Avg/Box Filter)",
     width=30,
     command=box_filter,
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Smoothing\n(3x3 Weighted Avg Filter)",
+    text="Image Smoothing - Linear\n(nxn Weighted Avg Filter)",
     width=30,
     command=wt_avg_filter,
 ).pack(pady=2, ipady=2)
 
-# ttk.Button(
-#     scrollable_algo_frame,
-#     text="Image Smoothing\n(3x3 Median Filter)",
-#     width=30,
-#     command=,
-# ).pack(pady=2, ipady=2)
-
-# ttk.Button(
-#     scrollable_algo_frame,
-#     text="Image Smoothing\n(3x3 Weighted Median Filter)",
-#     width=30,
-#     command=,
-# ).pack(pady=2, ipady=2)
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Smoothing - Non Linear\n(nxn Median Filter)",
+    width=30,
+    command=median_filter,
+).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Sharpening\n(Gradient - Roberts operator)",
+    text="Image Smoothing - Non Linear\n(3x3 Weighted Median Filter)",
+    width=30,
+    command=wt_median_filter,
+).pack(pady=2, ipady=2)
+
+ttk.Button(
+    scrollable_algo_frame,
+    text="Image Sharpening - Gradient\n(Roberts operator)",
     width=30,
     command=robert_op,
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Sharpening\n(Gradient - Prewitt operator)",
+    text="Image Sharpening - Gradient\n(Prewitt operator)",
     width=30,
     command=prewitt_op,
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Sharpening\n(Gradient - Sobel operator)",
+    text="Image Sharpening - Gradient\n(Sobel operator)",
     width=30,
     command=sobel_op,
 ).pack(pady=2, ipady=2)
 
 ttk.Button(
     scrollable_algo_frame,
-    text="Image Sharpening\n(Laplacian operator)",
+    text="Image Sharpening - Laplacian",
     width=30,
     command=laplacian_op,
 ).pack(pady=2, ipady=2)
 
+ttk.Button(
+    scrollable_algo_frame,
+    text="Canny Edge Detection",
+    width=30,
+    command=canny,
+).pack(pady=2, ipady=2)
 
 root.mainloop()
